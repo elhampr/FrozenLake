@@ -1,0 +1,90 @@
+import gym
+from tensorboardX import SummaryWriter
+
+import collections
+
+ENV_NAME = "FrozenLake-v0"
+GAMMA = 0.9
+ALPHA = 0.2
+TEST_EPISODES = 20
+
+
+class Agent:
+    def __init__(self):
+        self.env_train = gym.make(ENV_NAME)
+        self.state = self.env_train.reset()
+        self.values = collections.defaultdict(float)    
+    
+    def sample_env(self):
+            action = self.env_train.action_space.sample()
+            new_obs, reward, is_done, _ = self.env_train.step(action)
+            old_state = self.state
+            self.state = self.env_train.reset() if is_done else new_obs
+
+            return old_state, action, reward, new_obs
+
+    def value_update(self, s, a, r, sp):
+        best_v, _ = self.select_best_value_action(sp)
+        new_v = r + GAMMA*best_v
+        old_v = self.values[(s, a)] 
+        self.values[(s, a)] = old_v * (1-ALPHA) + new_v * ALPHA
+
+
+    def play_episode(self, env):
+        reward_tot = 0.0
+        obs = env.reset()
+        while True:
+            _, action = self.select_best_value_action(obs)
+            new_obs, reward, is_done, _ = env.step(action)
+            reward_tot += reward                                
+            if is_done:
+                break
+            obs = new_obs
+
+        return reward_tot    
+
+    def select_best_value_action(self, state):
+        best_act, best_val = None, None    
+        for action in range(self.env_train.action_space.n):
+            val = self.values[(state, action)]
+            if best_val is None or best_val<val:
+                best_act = action
+                best_val = val
+        return best_val, best_act        
+
+
+
+if __name__ == "__main__":
+    
+    env_test = gym.make(ENV_NAME)
+    agent = Agent()
+    writer = SummaryWriter(comment="-q-learning")
+
+    iter_no = 0
+    best_reward = 0.0
+
+    while True:
+        iter_no += 1
+        reward = 0.0
+
+        s, a, r, sp = agent.sample_env()
+        agent.value_update(s, a, r, sp)                             
+
+        reward = 0.0
+        for _ in range(TEST_EPISODES):
+            reward += agent.play_episode(env_test)
+
+        reward_m = reward/TEST_EPISODES
+        
+        writer.add_scalar("reward", reward_m, iter_no)
+
+        if reward_m>best_reward:
+            print("Best reward updated %.3f -> %.3f" % (
+                best_reward, reward_m))
+            best_reward = reward_m
+        
+        if reward_m > 0.80:
+            print("Solved in %d iterations!" % iter_no)
+            break
+    
+    writer.close()    
