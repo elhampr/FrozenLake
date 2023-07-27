@@ -120,10 +120,10 @@ if __name__ == "__main__":
         rw_m = float(numpy.mean(list(map(lambda s: s.reward, iter_batch))))  #still uses whole sample rewards to take the mean not only the elite
         elite_batch, obs, acts, rw_b = filter_batch(elite_batch+iter_batch, PERCENTILE)   #since in this problem the successful episode is rare we wat to keep elite episodes in other iters too
         
-        if not elite_batch:      #???
+        if not elite_batch:      
             continue
         
-        elite_batch = elite_batch[-500:]   #???
+        elite_batch = elite_batch[-500:]   
 
         optimizer.zero_grad()
         acts_vtf = net(obs)    #here the acts are scores not action option while those from batch file are action option themselves
