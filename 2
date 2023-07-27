@@ -1,0 +1,107 @@
+import gym
+from tensorboardX import SummaryWriter
+
+import collections
+
+
+ENV_NAME = "FrozenLake-v0"
+GAMMA = 0.9
+TEST_EPISODES = 20
+
+
+
+class Agent:
+    def __init__(self):
+        self.env_train = gym.make(ENV_NAME)
+        self.state = self.env_train.reset()
+        self.rewards = collections.defaultdict(float)
+        self.transits = collections.defaultdict(collections.Counter)
+        self.values = collections.defaultdict(float)    
+    
+    def play_n_random_steps(self, count):
+        for _ in range(count):
+            action = self.env_train.action_space.sample()
+            new_obs, reward, is_done, _ = self.env_train.step(action)
+            
+            self.rewards[(self.state, action, new_obs)] = reward
+            self.transits[(self.state, action)][new_obs] += 1
+
+            self.state = self.env_train.reset() if is_done else new_obs
+
+    def value_iteration(self):
+        for state in range(self.env_train.observation_space.n):
+            for action in range(self.env_train.action_space.n):
+                next_states = self.transits[(state, action)]
+                total = sum(next_states.values())
+                state_action_value = 0.0
+                for nxt_st, count in next_states.items():
+                    reward = self.rewards[(state, action, nxt_st)]
+                    
+                    best_act = self.select_action(nxt_st)
+                    val = reward + GAMMA*self.values[(nxt_st, best_act)]
+                    
+                    state_action_value += val*(count/total)
+
+                self.values[(state, action)] = state_action_value    
+               
+
+    def play_episode(self, env):
+        reward_tot = 0.0
+        obs = env.reset()
+        while True:
+            action = self.select_action(obs)
+            new_obs, reward, is_done, _ = env.step(action)
+            self.rewards[(obs, action, new_obs)] = reward
+            self.transits[(obs, action)][new_obs] += 1
+            reward_tot += reward                                
+            if is_done:
+                break
+            obs = new_obs
+
+        return reward_tot    
+
+    def select_action(self, state):
+        best_act, best_val = None, None    
+        for action in range(self.env_train.action_space.n):
+            val = self.values[(state, action)]
+            if best_val is None or best_val<val:
+                best_act = action
+                best_val = val
+        return best_act        
+
+
+
+if __name__ == "__main__":
+    
+    env_test = gym.make(ENV_NAME)
+    agent = Agent()
+    writer = SummaryWriter(comment="-q-iteration")
+
+    iter_no = 0
+    best_reward = 0.0
+
+    while True:
+        iter_no += 1
+        reward = 0.0
+
+        agent.play_n_random_steps(100)
+        agent.value_iteration()                               #BC random play change the values in rewards and transition functions, then the value inside the value array change as well.
+
+        reward = 0.0
+        for _ in range(TEST_EPISODES):
+            reward += agent.play_episode(env_test)
+
+        reward_m = reward/TEST_EPISODES
+        
+        writer.add_scalar("reward", reward_m, iter_no)
+
+        if reward_m>best_reward:
+            print("Best reward updated %.3f -> %.3f" % (
+                best_reward, reward_m))
+            best_reward = reward_m
+        
+        if reward_m > 0.80:
+            print("Solved in %d iterations!" % iter_no)
+            break
+    
+    writer.close()    
